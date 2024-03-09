@@ -10,14 +10,12 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
+import logging
+import logging.config
 from pathlib import Path
 
 import environ
-import logging
-import logging.config
-
 from django.utils.log import DEFAULT_LOGGING
-
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -172,7 +170,7 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Set Custom User as Default Auth User
-AUTH_USER_MODEL = "core.User"
+AUTH_USER_MODEL = "apps.core.User"
 
 # Django-allauth Configurations
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None

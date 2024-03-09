@@ -2,7 +2,7 @@
 Database Models.
 """
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
@@ -12,9 +12,6 @@ from django.utils.translation import gettext_lazy as _
 from model_utils.models import UUIDModel
 
 from .managers import UserManager
-
-if TYPE_CHECKING:
-    from .models import User  # noqa
 
 
 class User(AbstractBaseUser, PermissionsMixin, UUIDModel):

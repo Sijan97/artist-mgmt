@@ -4,15 +4,16 @@ Custom Managers.
 
 from typing import TYPE_CHECKING
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import BaseUserManager
 from django.utils.translation import gettext_lazy as _
 
 if TYPE_CHECKING:
-    from .models import User  # noqa
+    user = get_user_model()
 
 
-class UserManager(BaseUserManager["User"]):
+class UserManager(BaseUserManager["user"]):
     """Manager for custom user with email as username field."""
 
     def _create_user(self, email: str, password: str | None, **extra_fields):

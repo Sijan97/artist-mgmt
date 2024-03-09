@@ -5,15 +5,16 @@ CRUD Operations For User.
 import json
 import uuid
 
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import connection
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import status, permissions
+from knox.auth import AuthToken
+from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from knox.auth import AuthToken
 
 from apps.core.models import User
 from apps.core.schema import KnoxTokenScheme  # noqa
@@ -77,9 +78,7 @@ def get_user(request, id):
     },
     responses={
         (200, "application/json"): {"example": "Password changed successfully"},
-        (400, "application/json"): {
-            "example": "Invalid credentials or invalid JSON in request body"
-        },
+        (400, "application/json"): {"example": "Invalid credentials or invalid JSON in request body"},
     },
 )
 @api_view(["POST"])
@@ -94,9 +93,7 @@ def change_password(request):
             new_password = make_password(data.get("new_password"))
 
             with connection.cursor() as c:
-                c.execute(
-                    "SELECT id, password FROM core_user WHERE email = %s", [email]
-                )
+                c.execute("SELECT id, password FROM core_user WHERE email = %s", [email])
                 user_data = c.fetchone()
 
             if user_data:
@@ -194,16 +191,12 @@ def user_register(request):
                     )
 
                 return Response({"message": "Password did not match"})
-        except:
+        except json.JSONDecodeError:
             return Response({"message": "Failed to create user"})
 
 
 @extend_schema(
-    request={
-        "application/json": {
-            "example": {"email": "user@example.com", "password": "password"}
-        }
-    },
+    request={"application/json": {"example": {"email": "user@example.com", "password": "password"}}},
     responses={
         (200, "application/json"): {
             "example": {
@@ -213,9 +206,7 @@ def user_register(request):
                 "token": "194071249126h81d18hd912",
             }
         },
-        (401, "application/json"): {
-            "example": {"message": "Invalid Credentials", "status": "401"}
-        },
+        (401, "application/json"): {"example": {"message": "Invalid Credentials", "status": "401"}},
     },
 )
 @api_view(["POST"])
@@ -228,9 +219,7 @@ def login(request):
             email = data.get("email")
             password = data.get("password")
             with connection.cursor() as c:
-                c.execute(
-                    "SELECT id, password FROM core_user WHERE email = %s", [email]
-                )
+                c.execute("SELECT id, password FROM core_user WHERE email = %s", [email])
                 user_data = c.fetchone()
 
             if user_data:
@@ -253,9 +242,27 @@ def login(request):
                     {"message": "Invalid Credentials"},
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
-        except:
+        except json.JSONDecodeError:
             return Response({"message": "Login Failed"})
 
-    return Response(
-        {"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED
-    )
+    return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+@extend_schema(
+    responses={
+        (200, "application/json"): {"example": {"message": "Logout Successful"}},
+        (405, "application/json"): {"example": {"message": "Invalid request method"}},
+    }
+)
+@api_view(["POST"])
+@login_required
+def logout(request):
+    """Logout user."""
+
+    if request.method == "POST":
+        user = request.user
+        AuthToken.objects.filter(user=user).delete()
+
+        return Response({"message": "Logout Successful"})
+
+    return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
