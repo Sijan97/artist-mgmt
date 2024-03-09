@@ -170,7 +170,7 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Set Custom User as Default Auth User
-AUTH_USER_MODEL = "apps.core.User"
+AUTH_USER_MODEL = "core.User"
 
 # Django-allauth Configurations
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
