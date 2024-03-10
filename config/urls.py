@@ -18,7 +18,6 @@ Including another URLconf
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
-
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
@@ -30,10 +29,10 @@ urlpatterns = [
         name="api_docs",
     ),
     path("users/", include("apps.users.urls")),
+    path("user_profiles/", include("apps.profiles.urls")),
 ]
 
-if settings.DEBUG:
-    if "debug_toolbar" in settings.INSTALLED_APPS:
-        import debug_toolbar
+if settings.DEBUG and ("debug_toolbar" in settings.INSTALLED_APPS):
+    import debug_toolbar
 
-        urlpatterns = [path("__debug__/", include(debug_toolbar.urls))] + urlpatterns
+    urlpatterns = [path("__debug__/", include(debug_toolbar.urls))] + urlpatterns

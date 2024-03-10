@@ -21,6 +21,8 @@ class CustomUserAdmin(UserAdmin):
         "email",
         "is_staff",
         "is_active",
+        "created",
+        "modified",
     )
     list_filter = (
         "is_staff",

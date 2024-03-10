@@ -7,10 +7,9 @@ import uuid
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
-from django.db import connection
+from django.db import connection, transaction
 from django.utils import timezone
-from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import extend_schema
 from knox.auth import AuthToken
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
@@ -18,9 +17,11 @@ from rest_framework.response import Response
 
 from apps.core.models import User
 from apps.core.schema import KnoxTokenScheme  # noqa
+from apps.profiles.signals import create_profile_handler
 
 
 @extend_schema(
+    operation_id="get_users",
     responses={
         (200, "application/json"): {
             "example": [
@@ -31,8 +32,10 @@ from apps.core.schema import KnoxTokenScheme  # noqa
     },
 )
 @api_view(["GET"])
+@permission_classes([permissions.IsAdminUser])
 def get_users(request):
     """Get all users."""
+
     if request.method == "GET":
         with connection.cursor() as c:
             c.execute("SELECT id, email FROM core_user;")
@@ -43,9 +46,11 @@ def get_users(request):
 
         return Response({"users": result})
 
+    return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
 
 @extend_schema(
-    parameters=[OpenApiParameter("id", OpenApiTypes.UUID, OpenApiParameter.PATH)],
+    operation_id="get_user",
     responses={
         (200, "application/json"): {
             "example": {"user": [{"id": 1, "email": "user1@example.com"}]},
@@ -53,17 +58,41 @@ def get_users(request):
     },
 )
 @api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
 def get_user(request, id):
     """Get a specific user."""
+
     if request.method == "GET":
         with connection.cursor() as c:
-            c.execute("SELECT id, email FROM core_user WHERE id = %s", [id])
+            c.execute("SELECT id, email FROM core_user WHERE id = %s;", [id])
             columns = [col[0] for col in c.description]
             data = c.fetchall()
 
         result = [dict(zip(columns, row)) for row in data]
 
         return Response({"user": result})
+
+    return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+@extend_schema(
+    responses={
+        (200, "application/json"): {
+            "example": {"user": {"id": 1, "email": "user1@example.com"}},
+        }
+    },
+)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def get_current_user(request):
+    """Get authenticated user."""
+
+    if request.method == "GET":
+        authenticated_user = request.user
+
+        return Response({"user": {"id": authenticated_user.id, "email": authenticated_user.email}})
+
+    return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @extend_schema(
@@ -85,6 +114,7 @@ def get_user(request, id):
 @permission_classes([permissions.AllowAny])
 def change_password(request):
     """Change user password."""
+
     if request.method == "POST":
         try:
             data = request.data
@@ -93,7 +123,7 @@ def change_password(request):
             new_password = make_password(data.get("new_password"))
 
             with connection.cursor() as c:
-                c.execute("SELECT id, password FROM core_user WHERE email = %s", [email])
+                c.execute("SELECT id, password FROM core_user WHERE email = %s;", [email])
                 user_data = c.fetchone()
 
             if user_data:
@@ -103,7 +133,7 @@ def change_password(request):
                     # If the old password is correct, update the password to the new password
                     with connection.cursor() as cursor:
                         cursor.execute(
-                            "UPDATE core_user SET password = %s WHERE id = %s",
+                            "UPDATE core_user SET password = %s WHERE id = %s;",
                             [new_password, id],
                         )
 
@@ -118,6 +148,8 @@ def change_password(request):
                 {"message": "Invalid JSON in request body"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+    return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @extend_schema(
@@ -156,9 +188,11 @@ def user_register(request):
             confirm_password = data.get("confirm_password")
             hashed_password = make_password(password)
             date_joined = timezone.now()
+            created = timezone.now()
+            modified = timezone.now()
 
             with connection.cursor() as c:
-                c.execute("SELECT id FROM core_user WHERE email = %s", [email])
+                c.execute("SELECT id FROM core_user WHERE email = %s;", [email])
                 existing_user = c.fetchone()
 
                 if existing_user:
@@ -169,8 +203,18 @@ def user_register(request):
 
                 if password == confirm_password:
                     c.execute(
-                        "INSERT INTO core_user (id, email, password, is_superuser, is_staff, is_active, date_joined) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id, email",
-                        [id, email, hashed_password, False, False, True, date_joined],
+                        "INSERT INTO core_user (id, email, password, is_superuser, is_staff, is_active, date_joined, created, modified) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, email;",
+                        [
+                            id,
+                            email,
+                            hashed_password,
+                            False,
+                            False,
+                            True,
+                            date_joined,
+                            created,
+                            modified,
+                        ],
                     )
 
                     created_user = c.fetchone()
@@ -179,6 +223,11 @@ def user_register(request):
                     id, email = created_user
 
                     user = User.objects.get(id=id)
+
+                    # Send signal to create user profile
+                    create_profile_handler(sender=User, instance=user, created=True)
+
+                    # Generate token
                     knox_token = AuthToken.objects.create(user)[1]
 
                     return Response(
@@ -193,6 +242,8 @@ def user_register(request):
                 return Response({"message": "Password did not match"})
         except json.JSONDecodeError:
             return Response({"message": "Failed to create user"})
+
+    return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @extend_schema(
@@ -219,7 +270,7 @@ def login(request):
             email = data.get("email")
             password = data.get("password")
             with connection.cursor() as c:
-                c.execute("SELECT id, password FROM core_user WHERE email = %s", [email])
+                c.execute("SELECT id, password FROM core_user WHERE email = %s;", [email])
                 user_data = c.fetchone()
 
             if user_data:
@@ -264,5 +315,43 @@ def logout(request):
         AuthToken.objects.filter(user=user).delete()
 
         return Response({"message": "Logout Successful"})
+
+    return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+@extend_schema(
+    responses={
+        (200, "application/json"): {"example": {"message": "User deleted successfully"}},
+        (405, "application/json"): {"example": {"message": "Invalid request method"}},
+    }
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def delete_user(request, id):
+    """Delete inactive user."""
+
+    if request.method == "POST":
+        with transaction.atomic(using=connection.alias), connection.cursor() as c:
+            try:
+                # Delete all tokens for the user.
+                c.execute("DELETE FROM knox_authtoken WHERE user_id = %s;", [id])
+
+                # Delete user profile
+                c.execute("DELETE FROM core_userprofile WHERE user_id = %s;", [id])
+
+                # Delete user from table.
+                c.execute(
+                    "DELETE FROM core_user WHERE id = %s;",
+                    [id],
+                )
+
+                return Response(
+                    {
+                        "message": "User deleted successfully",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+            except Exception as e:
+                return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
