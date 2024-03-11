@@ -17,6 +17,7 @@ from rest_framework.response import Response
 
 from apps.core.models import User
 from apps.core.schema import KnoxTokenScheme  # noqa
+from apps.core.validations import email_validation, password_validation
 from apps.profiles.signals import create_profile_handler
 
 
@@ -102,6 +103,7 @@ def get_current_user(request):
                 "email": "user@example.com",
                 "old_password": "oldpassw",
                 "new_password": "newpass",
+                "confirm_password": "newpass",
             }
         }
     },
@@ -120,24 +122,39 @@ def change_password(request):
             data = request.data
             email = data.get("email")
             old_password = data.get("old_password")
-            new_password = make_password(data.get("new_password"))
+            new_password = data.get("new_password")
+            confirm_password = data.get("confirm_password")
+            hashed_password = make_password(new_password)
 
             with connection.cursor() as c:
+                # Validate email
+                if not email_validation(email):
+                    return Response({"message": "Invalid email."})
+
                 c.execute("SELECT id, password FROM core_user WHERE email = %s;", [email])
                 user_data = c.fetchone()
 
             if user_data:
                 id, stored_password = user_data
 
+                # If the old password is correct, update the password to the new password
                 if check_password(old_password, stored_password):
-                    # If the old password is correct, update the password to the new password
-                    with connection.cursor() as cursor:
-                        cursor.execute(
-                            "UPDATE core_user SET password = %s WHERE id = %s;",
-                            [new_password, id],
-                        )
+                    # Check confirm password
+                    if new_password == confirm_password:
+                        # Validate password
+                        if not password_validation(new_password):
+                            return Response({"message": "Please enter a strong password with at least 8 characters."})
+                        with connection.cursor() as cursor:
+                            cursor.execute(
+                                "UPDATE core_user SET password = %s WHERE id = %s;",
+                                [hashed_password, id],
+                            )
 
-                    return Response({"message": "Password changed successfully"})
+                        return Response({"message": "Password changed successfully"})
+
+                    return Response({"message": "New password and confirm password must match."})
+
+                return Response({"message": "Incorrect old password."})
 
             return Response(
                 {"message": "Invalid Email or Password"},
@@ -192,6 +209,13 @@ def user_register(request):
             modified = timezone.now()
 
             with connection.cursor() as c:
+                # Validate email
+                if not email_validation(email):
+                    return Response({"message": "Invalid email."})
+
+                if not password_validation(password):
+                    return Response({"message": "Please enter a strong password with at least 8 characters."})
+
                 c.execute("SELECT id FROM core_user WHERE email = %s;", [email])
                 existing_user = c.fetchone()
 
@@ -270,6 +294,10 @@ def login(request):
             email = data.get("email")
             password = data.get("password")
             with connection.cursor() as c:
+                # Validate email
+                if not email_validation(email):
+                    return Response({"message": "Invalid email."})
+
                 c.execute("SELECT id, password FROM core_user WHERE email = %s;", [email])
                 user_data = c.fetchone()
 
@@ -293,6 +321,8 @@ def login(request):
                     {"message": "Invalid Credentials"},
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
+
+            return Response({"message": f"User with email {email} not found."})
         except json.JSONDecodeError:
             return Response({"message": "Login Failed"})
 
@@ -320,10 +350,11 @@ def logout(request):
 
 
 @extend_schema(
+    request=None,
     responses={
         (200, "application/json"): {"example": {"message": "User deleted successfully"}},
         (405, "application/json"): {"example": {"message": "Invalid request method"}},
-    }
+    },
 )
 @api_view(["POST"])
 @permission_classes([permissions.IsAdminUser])

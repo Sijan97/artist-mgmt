@@ -11,7 +11,7 @@ from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from .validations import date_of_birth_validation
+from apps.core.validations import date_of_birth_validation
 
 
 @extend_schema(
