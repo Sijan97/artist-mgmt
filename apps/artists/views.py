@@ -9,9 +9,10 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.core.validations import date_of_birth_validation, integer_validation
+from apps.core.validations import date_validation, integer_validation
 
 
 @extend_schema(
@@ -46,7 +47,7 @@ from apps.core.validations import date_of_birth_validation, integer_validation
 )
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
-def get_artists(request):
+def get_artists(request: Request):
     """Get all artists."""
 
     if request.method == "GET":
@@ -91,7 +92,7 @@ def get_artists(request):
 )
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
-def get_artist(request, id):
+def get_artist(request: Request, id: str):
     """Get artist with id."""
 
     if request.method == "GET":
@@ -128,7 +129,7 @@ def get_artist(request, id):
         }
     },
     responses={
-        (200, "application/json"): {
+        (201, "application/json"): {
             "example": {
                 "message": "Artist created successfully",
                 "artist": {
@@ -147,7 +148,7 @@ def get_artist(request, id):
 )
 @api_view(["POST"])
 @permission_classes([permissions.IsAdminUser])
-def create_artist(request):
+def create_artist(request: Request):
     """Add new artist."""
 
     if request.method == "POST":
@@ -172,7 +173,7 @@ def create_artist(request):
                     return Response({"message": "Please enter a valid number of albums released."})
 
                 # Validate date of birth
-                if not date_of_birth_validation(date_of_birth):
+                if not date_validation(date_of_birth):
                     return Response({"message": "Date of birth must not be greater than present date."})
 
                 c.execute(
@@ -215,7 +216,8 @@ def create_artist(request):
                             "gender": gender,
                             "address": address,
                         },
-                    }
+                    },
+                    status=status.HTTP_201_CREATED,
                 )
 
             return Response({"message": "Failed to create artist."})
@@ -259,17 +261,17 @@ def create_artist(request):
         (400, "application/json"): {"example": {"message": "Failed to update artist."}},
     },
 )
-@api_view(["POST"])
+@api_view(["PUT", "PATCH"])
 @permission_classes([permissions.IsAdminUser])
-def update_artist(request, id):
+def update_artist(request: Request, id: str):
     """Update existing artist."""
 
-    if request.method == "POST":
+    if request.method == "PUT" or request.method == "PATCH":
         try:
             data = request.data
             name = data.get("name")
-            first_release_year = int(data.get("first_release_year"))
-            no_of_albums_released = int(data.get("no_of_albums_released"))
+            first_release_year = data.get("first_release_year")
+            no_of_albums_released = data.get("no_of_albums_released")
             date_of_birth = data.get("date_of_birth")
             gender = data.get("gender")
             address = data.get("address")
@@ -277,25 +279,51 @@ def update_artist(request, id):
 
             with connection.cursor() as c:
                 # Validate integers
-                if not integer_validation(first_release_year):
+                if first_release_year and not integer_validation(first_release_year):
                     return Response({"message": "Please enter a valid release year"})
 
-                if not integer_validation(no_of_albums_released):
+                if no_of_albums_released and not integer_validation(no_of_albums_released):
                     return Response({"message": "Please enter a valid number of albums released."})
 
                 # Validate date of birth
-                if not date_of_birth_validation(date_of_birth):
+                if date_of_birth and not date_validation(date_of_birth):
                     return Response({"message": "Date of birth must not be greater than present date."})
+
+                # Get stored data
+                c.execute(
+                    "SELECT name, first_release_year, no_of_albums_released, date_of_birth, gender, address FROM core_artistprofile WHERE id = %s;",
+                    [id],
+                )
+                artist_data = c.fetchone()
+
+                if artist_data:
+                    (
+                        stored_name,
+                        stored_first_release_year,
+                        stored_no_of_albums_released,
+                        stored_date_of_birth,
+                        stored_gender,
+                        stored_address,
+                    ) = artist_data
+
+                    new_name = name if name else stored_name
+                    new_first_release_year = first_release_year if first_release_year else stored_first_release_year
+                    new_no_of_albums_released = (
+                        no_of_albums_released if no_of_albums_released else stored_no_of_albums_released
+                    )
+                    new_date_of_birth = date_of_birth if date_of_birth else stored_date_of_birth
+                    new_gender = gender if gender else stored_gender
+                    new_address = address if address else stored_address
 
                 c.execute(
                     "UPDATE core_artistprofile SET name = %s, first_release_year = %s, no_of_albums_released = %s, date_of_birth = %s, gender = %s, address = %s, modified = %s WHERE id = %s RETURNING id, name, first_release_year, no_of_albums_released, date_of_birth, gender, address;",
                     [
-                        name,
-                        first_release_year,
-                        no_of_albums_released,
-                        date_of_birth,
-                        gender,
-                        address,
+                        new_name,
+                        new_first_release_year,
+                        new_no_of_albums_released,
+                        new_date_of_birth,
+                        new_gender,
+                        new_address,
                         modified,
                         id,
                     ],
@@ -346,16 +374,19 @@ def update_artist(request, id):
         (405, "application/json"): {"example": {"message": "Invalid request method"}},
     },
 )
-@api_view(["POST"])
+@api_view(["DELETE"])
 @permission_classes([permissions.IsAdminUser])
-def delete_artist(request, id):
+def delete_artist(request: Request, id: str):
     """Delete existing artist."""
 
-    if request.method == "POST":
+    if request.method == "DELETE":
         with transaction.atomic(using=connection.alias), connection.cursor() as c:
             try:
-                # Delete musics
-                # c.execute("DELETE FROM core_music WHERE artist_id = %s;", [id])
+                # Delete artist record from intermediatary table.
+                c.execute(
+                    "DELETE FROM core_music_artists WHERE artistprofile_id = %s;",
+                    [id],
+                )
 
                 # Delete artist from table.
                 c.execute(

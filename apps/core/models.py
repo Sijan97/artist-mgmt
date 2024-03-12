@@ -100,9 +100,49 @@ class ArtistProfile(Profile):
     def __str__(self) -> str:
         """String representation of the model."""
 
-        return f"{self.name}'s profile" if self.name else ""
+        return f"{self.name}" if self.name else ""
 
     def get_absolute_url(self) -> str:
         """Get URL for artist's profile detail view."""
 
         return reverse("artist_profile:detail", kwargs={"pk": self.id})
+
+
+class Music(UUIDModel, TimeStampedModel):
+    """Database model definition for music."""
+
+    GENRE_CHOICES = Choices("rnb", "country", "classic", "rock", "jazz", "pop")
+
+    def validate_date(value):
+        """Validate date of birth."""
+        if value > timezone.now():
+            raise ValidationError(_("Release date must not be greater than present."))
+
+    artists = models.ManyToManyField(ArtistProfile, related_name="musics", through="MusicArtists")
+    title = models.CharField(_("Title"), max_length=100, null=True, blank=True)
+    album_name = models.CharField(_("Album Name"), max_length=100, null=True, blank=True)
+    release_date = models.DateTimeField(_("Release Date"), null=True, blank=True, validators=[validate_date])
+    genre = models.CharField(_("Genre"), max_length=8, choices=GENRE_CHOICES, default=GENRE_CHOICES.rnb)
+
+    class Meta:
+        verbose_name = "Music"
+
+    def __str__(self) -> str:
+        """String representation of the model."""
+
+        return self.title
+
+    def get_absolute_url(self) -> str:
+        """Get URL for music detail view."""
+
+        return reverse("music:detail", kwargs={"pk": self.id})
+
+
+class MusicArtists(UUIDModel):
+    """Custom intermediatary table for music and artists."""
+
+    music = models.ForeignKey("Music", null=True, blank=True, on_delete=models.SET_NULL)
+    artistprofile = models.ForeignKey("ArtistProfile", null=True, blank=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        db_table = "core_music_artists"

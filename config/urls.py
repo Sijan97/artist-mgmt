@@ -31,6 +31,7 @@ urlpatterns = [
     path("users/", include("apps.users.urls")),
     path("user_profiles/", include("apps.profiles.urls")),
     path("artists/", include("apps.artists.urls")),
+    path("musics/", include("apps.musics.urls")),
 ]
 
 if settings.DEBUG and ("debug_toolbar" in settings.INSTALLED_APPS):

@@ -9,9 +9,10 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.request import Request
 from rest_framework.response import Response
 
-from apps.core.validations import date_of_birth_validation
+from apps.core.validations import date_validation
 
 
 @extend_schema(
@@ -45,7 +46,7 @@ from apps.core.validations import date_of_birth_validation
 )
 @api_view(["GET"])
 @permission_classes([permissions.IsAdminUser])
-def get_profiles(request):
+def get_profiles(request: Request):
     """Get all user profiles."""
 
     if request.method == "GET":
@@ -85,7 +86,7 @@ def get_profiles(request):
 )
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
-def get_profile(request, id):
+def get_profile(request: Request, id: str):
     """Get profile with id."""
 
     if request.method == "GET":
@@ -119,13 +120,13 @@ def get_profile(request, id):
         }
     },
     responses={
-        (200, "application/json"): {"example": {"message": "Profile created successfully"}},
+        (201, "application/json"): {"example": {"message": "Profile created successfully"}},
         (400, "application/json"): {"example": {"message": "Invalid JSON in request body."}},
     },
 )
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
-def create_profile(request):
+def create_profile(request: Request):
     """Create new user profile."""
 
     if request.method == "POST":
@@ -147,7 +148,7 @@ def create_profile(request):
                 user = c.fetchone()
 
                 if user:
-                    if not date_of_birth_validation(date_of_birth):
+                    if not date_validation(date_of_birth):
                         return Response({"message": "Date of birth must not be greater than present date."})
 
                     c.execute(
@@ -198,7 +199,6 @@ def create_profile(request):
     request={
         "application/json": {
             "example": {
-                "id": "79a8sf-saf48-468qwf-979qs",
                 "first_name": "User",
                 "last_name": "Profile",
                 "phone": "987654321",
@@ -213,12 +213,12 @@ def create_profile(request):
         (400, "application/json"): {"example": {"message": "Invalid JSON in request body."}},
     },
 )
-@api_view(["POST"])
+@api_view(["PUT", "PATCH"])
 @permission_classes([permissions.IsAuthenticated])
-def update_profile(request, id):
+def update_profile(request: Request, id: str):
     """Update user profile."""
 
-    if request.method == "POST":
+    if request.method == "PUT" or request.method == "PATCH":
         data = request.data
         first_name = data.get("first_name")
         last_name = data.get("last_name")
@@ -230,18 +230,43 @@ def update_profile(request, id):
 
         try:
             with connection.cursor() as c:
-                if not date_of_birth_validation(date_of_birth):
+                if date_of_birth and not date_validation(date_of_birth):
                     return Response({"message": "Date of birth must not be greater than present date."})
+
+                # Get stored data
+                c.execute(
+                    "SELECT first_name, last_name, phone, date_of_birth, gender, address FROM core_userprofile WHERE id = %s;",
+                    [id],
+                )
+
+                user_data = c.fetchone()
+
+                if user_data:
+                    (
+                        stored_first_name,
+                        stored_last_name,
+                        stored_phone,
+                        stored_date_of_birth,
+                        stored_gender,
+                        stored_address,
+                    ) = user_data
+
+                    new_first_name = first_name if first_name else stored_first_name
+                    new_last_name = last_name if last_name else stored_last_name
+                    new_phone = phone if phone else stored_phone
+                    new_date_of_birth = date_of_birth if date_of_birth else stored_date_of_birth
+                    new_gender = gender if gender else stored_gender
+                    new_address = address if address else stored_address
 
                 c.execute(
                     "UPDATE core_userprofile SET first_name = %s, last_name = %s, phone = %s, date_of_birth = %s, gender = %s, address = %s, modified = %s WHERE id = %s RETURNING id, first_name, last_name, phone, date_of_birth, gender, address, modified;",
                     [
-                        first_name,
-                        last_name,
-                        phone,
-                        date_of_birth,
-                        gender,
-                        address,
+                        new_first_name,
+                        new_last_name,
+                        new_phone,
+                        new_date_of_birth,
+                        new_gender,
+                        new_address,
                         modified,
                         id,
                     ],

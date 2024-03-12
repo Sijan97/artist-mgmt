@@ -33,8 +33,8 @@ def password_validation(password: str) -> bool:
         return False
 
 
-def date_of_birth_validation(date_str: datetime) -> bool:
-    """Validate date of birth."""
+def date_validation(date_str: datetime) -> bool:
+    """Validate date."""
 
     parsed_date = dateparse.parse_datetime(date_str)
 

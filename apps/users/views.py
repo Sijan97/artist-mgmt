@@ -13,6 +13,7 @@ from drf_spectacular.utils import extend_schema
 from knox.auth import AuthToken
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.models import User
@@ -34,7 +35,7 @@ from apps.profiles.signals import create_profile_handler
 )
 @api_view(["GET"])
 @permission_classes([permissions.IsAdminUser])
-def get_users(request):
+def get_users(request: Request):
     """Get all users."""
 
     if request.method == "GET":
@@ -60,7 +61,7 @@ def get_users(request):
 )
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
-def get_user(request, id):
+def get_user(request: Request, id: str):
     """Get a specific user."""
 
     if request.method == "GET":
@@ -85,7 +86,7 @@ def get_user(request, id):
 )
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
-def get_current_user(request):
+def get_current_user(request: Request):
     """Get authenticated user."""
 
     if request.method == "GET":
@@ -112,12 +113,12 @@ def get_current_user(request):
         (400, "application/json"): {"example": "Invalid credentials or invalid JSON in request body"},
     },
 )
-@api_view(["POST"])
+@api_view(["PATCH"])
 @permission_classes([permissions.AllowAny])
-def change_password(request):
+def change_password(request: Request):
     """Change user password."""
 
-    if request.method == "POST":
+    if request.method == "PATCH":
         try:
             data = request.data
             email = data.get("email")
@@ -180,7 +181,7 @@ def change_password(request):
         }
     },
     responses={
-        (200, "application/json"): {
+        (201, "application/json"): {
             "example": {
                 "message": "User Created",
                 "id": "1Sw1sFa-1298as-sf124124-12341k",
@@ -193,7 +194,7 @@ def change_password(request):
 )
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
-def user_register(request):
+def user_register(request: Request):
     """Register new user."""
 
     if request.method == "POST":
@@ -260,7 +261,8 @@ def user_register(request):
                             "id": id,
                             "email": email,
                             "token": knox_token,
-                        }
+                        },
+                        status=status.HTTP_201_CREATED,
                     )
 
                 return Response({"message": "Password did not match"})
@@ -286,8 +288,9 @@ def user_register(request):
 )
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
-def login(request):
+def login(request: Request):
     """User login with email and password."""
+
     if request.method == "POST":
         try:
             data = request.data
@@ -337,7 +340,7 @@ def login(request):
 )
 @api_view(["POST"])
 @login_required
-def logout(request):
+def logout(request: Request):
     """Logout user."""
 
     if request.method == "POST":
@@ -356,12 +359,12 @@ def logout(request):
         (405, "application/json"): {"example": {"message": "Invalid request method"}},
     },
 )
-@api_view(["POST"])
+@api_view(["DELETE"])
 @permission_classes([permissions.IsAdminUser])
-def delete_user(request, id):
+def delete_user(request: Request, id: str):
     """Delete inactive user."""
 
-    if request.method == "POST":
+    if request.method == "DELETE":
         with transaction.atomic(using=connection.alias), connection.cursor() as c:
             try:
                 # Delete all tokens for the user.
