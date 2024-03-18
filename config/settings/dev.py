@@ -1,6 +1,5 @@
 from .base import *
 
-
 # Toggle Debug Mode
 DEBUG = True
 
@@ -15,7 +14,15 @@ DEBUG_TOOLBAR_CONFIG = {
 }
 
 # Allowed Hosts Definition
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+
+CORS_ORIGIN_WHITELIST = (
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+)
+
+CSRF_TRUSTED_ORIGINS = ["http://localhost", "http://127.0.0.1"]
+
 
 # Local Database Configuration
 DATABASES = {

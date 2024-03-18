@@ -9,10 +9,17 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.validations import date_validation
+
+
+class ProfilesPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
 
 
 @extend_schema(
@@ -45,9 +52,11 @@ from apps.core.validations import date_validation
     },
 )
 @api_view(["GET"])
-@permission_classes([permissions.IsAdminUser])
+@permission_classes([permissions.IsAuthenticated])
 def get_profiles(request: Request):
     """Get all user profiles."""
+
+    paginator = ProfilesPagination()
 
     if request.method == "GET":
         with connection.cursor() as c:
@@ -59,7 +68,9 @@ def get_profiles(request: Request):
 
         result = [dict(zip(columns, row)) for row in data]
 
-        return Response({"user_profiles": result})
+        page = paginator.paginate_queryset(result, request)
+
+        return paginator.get_paginated_response(page)
 
     return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
@@ -92,7 +103,7 @@ def get_profile(request: Request, id: str):
     if request.method == "GET":
         with connection.cursor() as c:
             c.execute(
-                "SELECT p.id, u.email, (first_name || ' ' || last_name) as full_name, DATE(date_of_birth) as date_of_birth, gender, address, phone FROM core_userprofile p INNER JOIN core_user u ON p.user_id = u.id WHERE p.id = %s;",
+                "SELECT p.id, u.email, first_name, last_name, DATE(date_of_birth) as date_of_birth, gender, address, phone FROM core_userprofile p INNER JOIN core_user u ON p.user_id = u.id WHERE p.id = %s;",
                 [id],
             )
             columns = [col[0] for col in c.description]
@@ -100,7 +111,7 @@ def get_profile(request: Request, id: str):
 
         result = [dict(zip(columns, row)) for row in data]
 
-        return Response({"user_profile": result})
+        return Response(result[0])
 
     return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 

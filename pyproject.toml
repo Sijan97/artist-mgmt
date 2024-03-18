@@ -68,6 +68,7 @@ exclude = [
     "buck-out",
     "build",
     "dist",
+    "settings",
     "node_modules",
     "venv",
     "business-facing/layer", #OKAPI Layer

@@ -9,10 +9,17 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.validations import date_validation, integer_validation
+
+
+class ArtistsPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
 
 
 @extend_schema(
@@ -20,7 +27,10 @@ from apps.core.validations import date_validation, integer_validation
     responses={
         (200, "application/json"): {
             "example": {
-                "artists": [
+                "count": 2,
+                "next": "http://localhost:8000/artists/?page=2",
+                "previous": None,
+                "results": [
                     {
                         "id": "21321-dsa123-1d1d13-54ts34",
                         "name": "Artist",
@@ -39,16 +49,17 @@ from apps.core.validations import date_validation, integer_validation
                         "gender": "female",
                         "address": "London, UK",
                     },
-                ]
+                ],
             }
         },
-        (405, "application/json"): {"example": {"message": "Invalid request method."}},
+        (405, "application/json"): {"example": "Invalid request method."},
     },
 )
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def get_artists(request: Request):
     """Get all artists."""
+    paginator = ArtistsPagination()
 
     if request.method == "GET":
         with connection.cursor() as c:
@@ -61,7 +72,9 @@ def get_artists(request: Request):
 
         result = [dict(zip(columns, row)) for row in artist_data]
 
-        return Response({"artists": result})
+        page = paginator.paginate_queryset(result, request)
+
+        return paginator.get_paginated_response(page)
 
     return Response(
         {"message": "Invaid request method."},
@@ -107,7 +120,7 @@ def get_artist(request: Request, id: str):
 
         result = [dict(zip(columns, row)) for row in artist_data]
 
-        return Response({"artist": result})
+        return Response(result[0])
 
     return Response(
         {"message": "Invaid request method."},
@@ -147,10 +160,9 @@ def get_artist(request: Request, id: str):
     },
 )
 @api_view(["POST"])
-@permission_classes([permissions.IsAdminUser])
+@permission_classes([permissions.IsAuthenticated])
 def create_artist(request: Request):
     """Add new artist."""
-
     if request.method == "POST":
         try:
             data = request.data
@@ -262,7 +274,7 @@ def create_artist(request: Request):
     },
 )
 @api_view(["PUT", "PATCH"])
-@permission_classes([permissions.IsAdminUser])
+@permission_classes([permissions.IsAuthenticated])
 def update_artist(request: Request, id: str):
     """Update existing artist."""
 
@@ -375,7 +387,7 @@ def update_artist(request: Request, id: str):
     },
 )
 @api_view(["DELETE"])
-@permission_classes([permissions.IsAdminUser])
+@permission_classes([permissions.IsAuthenticated])
 def delete_artist(request: Request, id: str):
     """Delete existing artist."""
 

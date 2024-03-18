@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 import logging
 import logging.config
+from datetime import timedelta
 from pathlib import Path
 
 import environ
@@ -163,6 +164,12 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
+# KNOX Settings
+REST_KNOX = {
+    "TOKEN_TTL": timedelta(hours=10),
+    "AUTO_REFRESH": False,
+}
+
 # DRF Spectacular Configuration
 SPECTACULAR_SETTINGS = {
     "TITLE": "Artist Management System API",
@@ -174,6 +181,10 @@ SPECTACULAR_SETTINGS = {
 
 # Set Custom User as Default Auth User
 AUTH_USER_MODEL = "core.User"
+
+# CORS Setup
+CORS_ORIGIN_ALLOW_ALL = False
+CORS_ALLOW_CREDENTIALS = True
 
 # Django-allauth Configurations
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None

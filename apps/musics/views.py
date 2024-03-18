@@ -10,10 +10,17 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.validations import date_validation
+
+
+class MusicsPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 100
 
 
 @extend_schema(
@@ -54,6 +61,7 @@ from apps.core.validations import date_validation
 @permission_classes([permissions.IsAuthenticated])
 def get_musics(request: Request):
     """Get all musics"""
+    paginator = MusicsPagination()
 
     if request.method == "GET":
         with connection.cursor() as c:
@@ -95,7 +103,9 @@ def get_musics(request: Request):
                 music_info["artists"] = artist_list
                 music_list.append(music_info)
 
-        return Response({"musics": music_list}, status=status.HTTP_200_OK)
+        page = paginator.paginate_queryset(music_list, request)
+
+        return paginator.get_paginated_response(page)
 
     return Response(
         {"message": "Invaid request method."},
@@ -166,7 +176,7 @@ def get_music(request: Request, id: str):
 
                 music_info["artists"] = artist_list
 
-        return Response({"music": music_info}, status=status.HTTP_200_OK)
+        return Response(music_info, status=status.HTTP_200_OK)
 
     return Response(
         {"message": "Invaid request method."},
@@ -264,7 +274,7 @@ def get_music_by_artist(request: Request, artist_id: str):
     },
 )
 @api_view(["POST"])
-@permission_classes([permissions.IsAdminUser])
+@permission_classes([permissions.IsAuthenticated])
 def create_music(request: Request):
     """Add new music."""
 
@@ -287,7 +297,15 @@ def create_music(request: Request):
 
                 c.execute(
                     "INSERT INTO core_music(id, title, release_date, album_name, genre, created, modified) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id, title, release_date, album_name, genre;",
-                    [id, title, release_date, album_name, genre, created, modified],
+                    [
+                        str(id),
+                        title,
+                        release_date,
+                        album_name,
+                        genre,
+                        created,
+                        modified,
+                    ],
                 )
                 music_data = c.fetchone()
 
@@ -375,7 +393,7 @@ def create_music(request: Request):
     },
 )
 @api_view(["PUT", "PATCH"])
-@permission_classes([permissions.IsAdminUser])
+@permission_classes([permissions.IsAuthenticated])
 def update_music(request: Request, id: str):
     """Update existing music."""
 
@@ -397,10 +415,11 @@ def update_music(request: Request, id: str):
                 # Get stored data
                 c.execute(
                     "SELECT title, release_date, album_name, genre, core_music_artists.artistprofile_id as artists FROM core_music INNER JOIN core_music_artists ON core_music.id = core_music_artists.music_id WHERE core_music.id = %s;",
-                    [id],
+                    [str(id)],
                 )
 
                 music_data = c.fetchall()
+                print(f"Music Data =============> {music_data}")
 
                 if music_data:
                     artist_list = []

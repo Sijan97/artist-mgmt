@@ -6,6 +6,8 @@ DEBUG = False
 # Add Allowed Hosts
 ALLOWED_HOSTS = []
 
+CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
+
 # Production Database Configuration
 DATABASES = {
     "default": {

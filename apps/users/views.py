@@ -212,10 +212,10 @@ def user_register(request: Request):
             with connection.cursor() as c:
                 # Validate email
                 if not email_validation(email):
-                    return Response({"message": "Invalid email."})
-
-                if not password_validation(password):
-                    return Response({"message": "Please enter a strong password with at least 8 characters."})
+                    return Response(
+                        {"message": "Invalid email."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
                 c.execute("SELECT id FROM core_user WHERE email = %s;", [email])
                 existing_user = c.fetchone()
@@ -223,6 +223,12 @@ def user_register(request: Request):
                 if existing_user:
                     return Response(
                         {"message": "User already exists."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                if not password_validation(password):
+                    return Response(
+                        {"message": "Please enter a strong password with at least 8 characters."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
@@ -243,6 +249,11 @@ def user_register(request: Request):
                     )
 
                     created_user = c.fetchone()
+                else:
+                    return Response(
+                        {"message": "Password did not match"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
                 if created_user:
                     id, email = created_user
@@ -264,10 +275,11 @@ def user_register(request: Request):
                         },
                         status=status.HTTP_201_CREATED,
                     )
-
-                return Response({"message": "Password did not match"})
         except json.JSONDecodeError:
-            return Response({"message": "Failed to create user"})
+            return Response(
+                {"message": "Failed to create user"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
@@ -317,7 +329,8 @@ def login(request: Request):
                             "id": id,
                             "email": email,
                             "token": knox_token,
-                        }
+                        },
+                        status=status.HTTP_200_OK,
                     )
 
                 return Response(
@@ -325,18 +338,22 @@ def login(request: Request):
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
 
-            return Response({"message": f"User with email {email} not found."})
-        except json.JSONDecodeError:
-            return Response({"message": "Login Failed"})
+            return Response(
+                {"message": "User with given credentials not found."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        except Exception as e:
+            return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response({"message": "Invalid request method"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @extend_schema(
+    request=None,
     responses={
         (200, "application/json"): {"example": {"message": "Logout Successful"}},
         (405, "application/json"): {"example": {"message": "Invalid request method"}},
-    }
+    },
 )
 @api_view(["POST"])
 @login_required
