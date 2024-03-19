@@ -146,3 +146,5 @@ class MusicArtists(UUIDModel):
 
     class Meta:
         db_table = "core_music_artists"
+        verbose_name = "Music Artist"
+        verbose_name_plural = "Music Artists"

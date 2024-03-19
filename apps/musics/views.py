@@ -171,10 +171,10 @@ def get_music(request: Request, id: str):
                     artist_data = c.fetchall()
 
                     if artist_data:
-                        artist_name = artist_data[0][1]
-                        artist_list.append(artist_name)
+                        artist_id = artist_data[0][0]
+                        artist_list.append(artist_id)
 
-                music_info["artists"] = artist_list
+                music_info["artist_ids"] = artist_list
 
         return Response(music_info, status=status.HTTP_200_OK)
 
@@ -217,11 +217,12 @@ def get_music(request: Request, id: str):
 @permission_classes([permissions.IsAuthenticated])
 def get_music_by_artist(request: Request, artist_id: str):
     """Get music by artist."""
+    paginator = MusicsPagination()
 
     if request.method == "GET":
         with connection.cursor() as c:
             c.execute(
-                "SELECT m.id, m.title, m.release_date, m.album_name, m.genre FROM core_artistprofile a INNER JOIN core_music_artists ma ON a.id = ma.artistprofile_id INNER JOIN core_music m ON ma.music_id = m.id WHERE a.id = %s;",
+                "SELECT core_music.id, title, release_date, album_name, genre FROM core_music INNER JOIN core_music_artists ON core_music.id = core_music_artists.music_id INNER JOIN core_artistprofile ON core_music_artists.artistprofile_id = core_artistprofile.id WHERE core_artistprofile.id = %s;",
                 [artist_id],
             )
 
@@ -230,7 +231,9 @@ def get_music_by_artist(request: Request, artist_id: str):
 
         result = [dict(zip(columns, row)) for row in music_data]
 
-        return Response({"musics": result}, status=status.HTTP_200_OK)
+        page = paginator.paginate_queryset(result, request)
+
+        return paginator.get_paginated_response(page)
 
     return Response(
         {"message": "Invaid request method."},
@@ -501,7 +504,7 @@ def update_music(request: Request, id: str):
     },
 )
 @api_view(["DELETE"])
-@permission_classes([permissions.IsAdminUser])
+@permission_classes([permissions.IsAuthenticated])
 def delete_music(request: Request, id: str):
     """Delete existing music."""
 
